@@ -1,0 +1,47 @@
+{
+  "name": "pi-unifi",
+  "version": "0.1.0",
+  "description": "UniFi Network (UniFi OS) tools for the pi coding agent and a standard MCP server (mcp-unifi) — official UniFi Network Integration API.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bacnh85/unifi-agents.git"
+  },
+  "bin": {
+    "mcp-unifi": "dist/mcp-server.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && bash dist-mcp.sh",
+    "prepare": "npm run build",
+    "start": "node dist/mcp-server.js",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "undici": "^7.0.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  },
+  "keywords": [
+    "pi-package",
+    "mcp",
+    "unifi",
+    "ubiquiti"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/extension.ts"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
