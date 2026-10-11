@@ -23,7 +23,7 @@ async function main() {
     "Orientation: call unifi_status first. Devices/clients resolve by id, MAC, IP (clients), or case-insensitive name — " +
     "exact-name misses retry with the MAC shown in the Candidates list, since UniFi suffixes duplicate client names with the MAC tail. " +
     "List tools accept the controller filter DSL, e.g. filter=name.eq('office-ap') or type.eq('uap'); wildcards use *. " +
-    "Generic reads of any /v1/... endpoint go through unifi_get. " +
+    "Generic reads of any /v1/... endpoint go through unifi_get (switch stacks/LAGs/MC-LAG, wans, vpn tunnels/servers, radius profiles, device-tags, dpi, countries, firewall/ACL ordering reads). " +
     "Write tools are rejected by the controller when the API key is read-only; UOS_READ_ONLY=true also hides them from this list.";
 
   const server = new McpServer(
@@ -42,7 +42,8 @@ async function main() {
       async (args) => {
         try {
           const result = await tool.execute((args ?? {}) as Record<string, unknown>);
-          return { content: [{ type: "text", text: JSON.stringify(result) }] };
+          // ?? null: DELETE endpoints return 204/empty — JSON.stringify(undefined) is not a valid text content.
+          return { content: [{ type: "text", text: JSON.stringify(result ?? null) }] };
         } catch (err) {
           return {
             content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],

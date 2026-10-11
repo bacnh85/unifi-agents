@@ -11,7 +11,7 @@ Let AI agents operate your [UniFi Network](https://uni.fi) controller — safely
 
 Both use the **official UniFi Network Integration API** (key-based, UniFi OS 10.x) — no scraping, no legacy credentials.
 
-- **25 tools** — 13 read, 12 write
+- **49 tools** — 18 read, 31 write
 - **Resolve by name** — `unifi_device device="office-ap"`, not just UUIDs; MAC and IP work too
 - **Controller filter DSL** — `filter=name.like('office*')` on every list tool
 - **Read-only mode** — hide all write tools with one environment variable
@@ -121,19 +121,29 @@ UOS_API_PATH=/proxy/network/integration
 | `unifi_client` | read | One client by id / MAC / IP / name |
 | `unifi_networks` | read | Networks/VLANs |
 | `unifi_wifis` | read | WiFi broadcasts (SSIDs) + security configuration |
-| `unifi_radius_profiles` | read | RADIUS profiles (read-only; manage profiles in the UniFi UI) |
 | `unifi_vouchers` | read | Hotspot vouchers |
-| `unifi_firewall_zones` | read | Zone-based firewall zones |
-| `unifi_firewall_policies` | read | Zone-based firewall policies |
+| `unifi_firewall_zones` | read | Zone-based firewall zones (list or one zone by id) |
+| `unifi_firewall_policies` | read | Zone-based firewall policies (list or one policy by id) |
+| `unifi_pending_devices` | read | Devices awaiting adoption (controller-wide) |
+| `unifi_network_references` | read | Resources referencing a network (pre-delete check) |
+| `unifi_acl_rules` | read | Switch ACL rules (list or one by id) |
+| `unifi_dns_policies` | read | Local DNS records (list or one by id) |
+| `unifi_traffic_lists` | read | Traffic matching lists (list or one by id) |
+| `unifi_radius_profiles` | read | RADIUS profiles (read-only; manage profiles in the UniFi UI) |
 | `unifi_get` | read | Generic GET for any `/v1/...` endpoint without a dedicated tool |
-| `unifi_device_action` | write | RESTART (reboot) / LOCATE (blink LED) |
-| `unifi_port_action` | write | Switch-port actions, e.g. PoE `POWER_CYCLE` |
-| `unifi_client_action` | write | BLOCK / UNBLOCK a client |
-| `unifi_create_voucher` | write | Create hotspot vouchers |
+| `unifi_device_action` | write | RESTART (reboot) — the API-documented device action |
+| `unifi_port_action` | write | Switch-port action: PoE `POWER_CYCLE` |
+| `unifi_client_action` | write | AUTHORIZE/UNAUTHORIZE guest access (with optional time/data/rate limits) |
+| `unifi_device_adopt` / `unifi_device_delete` | write | Adopt a pending device / unadopt (factory-reset) an adopted one |
+| `unifi_create_voucher` / `unifi_voucher_delete` | write | Generate hotspot vouchers; delete one or all matching a filter |
 | `unifi_network_create` / `unifi_network_update` / `unifi_network_delete` | write | Manage networks/VLANs |
-| `unifi_wifi_update` / `unifi_wifi_delete` | write | Update or remove SSIDs |
-| `unifi_wifi_create_enterprise` | write | Create a WPA2-Enterprise (802.1X) SSID |
-| `unifi_firewall_policy_create` / `unifi_firewall_policy_update` | write | Manage zone-based firewall policies |
+| `unifi_wifi_create` / `unifi_wifi_update` / `unifi_wifi_delete` | write | Create (open/WPA2-Personal/WPA2-Enterprise), update or remove SSIDs |
+| `unifi_wifi_create_enterprise` | write | Create a WPA2-Enterprise (802.1X) SSID (verified shape) |
+| `unifi_firewall_zone_create` / `unifi_firewall_zone_update` / `unifi_firewall_zone_delete` | write | Manage custom firewall zones |
+| `unifi_firewall_policy_create` / `unifi_firewall_policy_update` / `unifi_firewall_policy_delete` / `unifi_firewall_policies_reorder` | write | Manage zone-based firewall policies and their evaluation order |
+| `unifi_acl_rule_create` / `unifi_acl_rule_update` / `unifi_acl_rule_delete` / `unifi_acl_rules_reorder` | write | Manage switch ACL rules and their order |
+| `unifi_dns_policy_create` / `unifi_dns_policy_update` / `unifi_dns_policy_delete` | write | Manage local DNS records |
+| `unifi_traffic_list_create` / `unifi_traffic_list_update` / `unifi_traffic_list_delete` | write | Manage traffic matching lists (port/IP sets) |
 
 All list tools accept the controller's filter syntax, passed through verbatim: `filter=name.eq('web-server')`, `and(enabled.eq(true), name.isNotNull())`, `not(name.like('guest*'))`, `type.in('uap','usw')`. Wildcards use `*`; timestamps are ISO-8601.
 
@@ -143,8 +153,10 @@ All list tools accept the controller's filter syntax, passed through verbatim: `
 - *"Which access points have clients on the guest SSID?"*
 - *"Show CPU and memory for the USW switch"* → `unifi_device_stats`
 - *"Reboot the UAP in the office"* → `unifi_device_action RESTART`
-- *"Cut network access for the device with MAC aa:bb:cc:dd:ee:ff"* → `unifi_client_action BLOCK`
+- *"Cut guest access for the device with MAC aa:bb:cc:dd:ee:ff"* → `unifi_client_action UNAUTHORIZE_GUEST_ACCESS`
 - *"Create a voucher: 8 hours, 10 uses, named 'guests-weekend'"*
+- *"Set up a local DNS record: nas.local → 192.168.1.50"*
+- *"Block the cameras VLAN from reaching the office zone with a firewall policy"*
 - *"Add a VLAN 30 'iot' network and put the 'Cameras' SSID on it"*
 
 ## Security
@@ -187,6 +199,7 @@ Every push/PR runs build + smoke (unit checks; live-controller checks self-skip 
 
 - API endpoints are called verbatim (`/v1/...`) behind the configured prefix — verified against UniFi Network 10.6.106 on UniFi OS Server.
 - RADIUS profiles and wired 802.1X port profiles are **read-only via the Integration API** on 10.6.x (create them in the UniFi UI); `unifi_wifi_create_enterprise` covers WPA2-Enterprise SSIDs.
+- **Switch port profiles are not exposed by the Integration API** as of Network 10.6.106 (verified against the official OpenAPI spec — switch ports offer only the `POWER_CYCLE` action, no profile get/set endpoints). This is a controller-API limitation, not a tool gap: port profiles must be managed in the UniFi UI. The legacy "classic" API (`/proxy/network/api/s/<site>/rest/portconf`) does support them but requires an admin cookie login and is deliberately out of scope for this project.
 
 ## License
 

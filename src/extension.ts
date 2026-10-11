@@ -8,8 +8,8 @@ import { buildTools } from "./tools.js";
 
 const NAMESPACE = {
   name: "unifi",
-  description:
-    "UniFi Network controller via the official Integration API: devices, clients, wifi, networks, firewall, hotspot vouchers.",
+    description:
+      "UniFi Network controller via the official Integration API: devices (incl. adoption), clients, wifi, networks, firewall zones/policies, ACL rules, DNS policies, traffic matching lists, hotspot vouchers.",
   instructions:
     "Resolve devices/clients by name or MAC (unifi_device, unifi_client take flexible ids). " +
     "List tools accept the controller filter DSL, e.g. filter=name.eq('office-ap') or type.eq('uap'). " +
@@ -43,7 +43,8 @@ export default function unifiExtension(pi: ExtensionAPI): void {
       namespace: NAMESPACE,
       execute: async (_toolCallId, args) => {
         const result = await tool.execute((args ?? {}) as Record<string, unknown>);
-        return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
+        // ?? null: DELETE endpoints return 204/empty — JSON.stringify(undefined) is not a valid text content.
+        return { content: [{ type: "text", text: JSON.stringify(result ?? null) }], details: undefined };
       },
     });
   }

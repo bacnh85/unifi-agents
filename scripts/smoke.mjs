@@ -64,12 +64,32 @@ const { loadConfig } = await import(`${repoRoot}dist/config.js`);
 {
   const readOnly = buildTools(async () => ({}), true);
   const readWrite = buildTools(async () => ({}), false);
-  eq(readOnly.length, 13, "read-only tool count is 13");
-  eq(readWrite.length, 25, "read-write tool count is 25");
+  eq(readOnly.length, 18, "read-only tool count is 18");
+  eq(readWrite.length, 49, "read-write tool count is 49");
   assert(
     readWrite.every((t) => t.params.type === "object" && typeof t.execute === "function"),
     "every tool has object params + execute",
   );
+  const names = new Set(readWrite.map((t) => t.name));
+  const newTools = [
+    "unifi_pending_devices", "unifi_network_references", "unifi_acl_rules", "unifi_dns_policies",
+    "unifi_traffic_lists", "unifi_device_adopt", "unifi_device_delete", "unifi_voucher_delete",
+    "unifi_wifi_create", "unifi_firewall_zone_create", "unifi_firewall_zone_update", "unifi_firewall_zone_delete",
+    "unifi_firewall_policy_delete", "unifi_firewall_policies_reorder", "unifi_acl_rule_create", "unifi_acl_rule_update",
+    "unifi_acl_rule_delete", "unifi_acl_rules_reorder", "unifi_dns_policy_create", "unifi_dns_policy_update",
+    "unifi_dns_policy_delete", "unifi_traffic_list_create", "unifi_traffic_list_update", "unifi_traffic_list_delete",
+  ];
+  eq(newTools.every((n) => names.has(n)), true, "all 24 coverage tools registered");
+  // Fixed voucher body: timeLimitMinutes + name required, no durationMinutes/expiresAt.
+  const voucher = readWrite.find((t) => t.name === "unifi_create_voucher");
+  eq(voucher?.params.required?.includes("timeLimitMinutes"), true, "voucher create requires timeLimitMinutes");
+  eq(voucher?.params.required?.includes("name"), true, "voucher create requires name");
+  eq("durationMinutes" in (voucher?.params.properties ?? {}), false, "voucher create dropped durationMinutes");
+  // Destructive new writes carry destructiveHint.
+  for (const n of ["unifi_device_delete", "unifi_voucher_delete", "unifi_firewall_zone_delete", "unifi_firewall_policy_delete", "unifi_acl_rule_delete", "unifi_dns_policy_delete", "unifi_traffic_list_delete"]) {
+    const t = readWrite.find((x) => x.name === n);
+    eq(t?.annotations.destructiveHint, true, `${n} annotated destructive`);
+  }
   const writes = new Set(readWrite.slice(readOnly.length).map((t) => t.name));
   eq(writes.has("unifi_network_delete") && writes.has("unifi_device_action"), true, "write tools present");
 }
@@ -130,6 +150,32 @@ if (!process.env.UOS_API_KEY || !process.env.UOS_BASE_URL) {
 
     const countries = await client.request("GET", "/v1/countries", { query: { limit: 5 } });
     eq((countries.data ?? countries)?.length, 5, "live /v1/countries?limit=5 returns 5 rows");
+
+    // New-coverage read probes (list-only, cheap, read-only).
+    const pending = await client.request("GET", "/v1/pending-devices", { query: { limit: 5 } });
+    assert(Array.isArray(pending.data ?? pending), "live /v1/pending-devices returns a list");
+    const siteId2 = await client.resolveSiteId();
+    for (const [label, path] of [
+      ["dns policies", `/v1/sites/${siteId2}/dns/policies`],
+      ["acl rules", `/v1/sites/${siteId2}/acl-rules`],
+      ["traffic matching lists", `/v1/sites/${siteId2}/traffic-matching-lists`],
+    ]) {
+      const res = await client.request("GET", path, { query: { limit: 1 } });
+      assert(res.data === undefined || Array.isArray(res.data), `live ${label} endpoint reachable`);
+    }
+
+    // Firewall endpoints need Zone-Based Firewall; controllers without it 400 with a
+    // specific message (documented in README) — skip visibly, fail loudly on anything else.
+    try {
+      const zones = await client.request("GET", `/v1/sites/${siteId2}/firewall/zones`, { query: { limit: 1 } });
+      assert(Array.isArray(zones.data ?? zones), "live firewall zones list reachable");
+    } catch (err) {
+      if (/Zone Based Firewall is not configured/i.test(err.message)) {
+        console.log("SKIP  live firewall zones (ZBF not configured on this controller)");
+      } else {
+        assert(false, `live firewall zones: ${err.message}`);
+      }
+    }
   } catch (err) {
     console.log(`SKIP  live controller checks failed: ${err.message}`);
   }
