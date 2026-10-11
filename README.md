@@ -1,66 +1,37 @@
 # unifi-agents
 
 [![CI](https://github.com/bacnh85/unifi-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/bacnh85/unifi-agents/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@bacnh85/pi-unifi.svg)](https://www.npmjs.com/package/@bacnh85/pi-unifi)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-[UniFi Network](https://uni.fi) for AI agents: a **pi coding agent extension** (`pi-unifi`) and a **standard MCP server** (`mcp-unifi`) in one package, built on the official UniFi Network Integration API (key-based, UniFi OS 10.x).
+Let AI agents operate your [UniFi Network](https://uni.fi) controller — safely and conversationally. Ships two entry points in one package:
 
-Repo: `github.com/bacnh85/unifi-agents` · npm package: [`@bacnh85/pi-unifi`](https://www.npmjs.com/package/@bacnh85/pi-unifi)
+- a **[pi coding agent](https://github.com/earendil-works/pi) extension** (`pi-unifi`), and
+- a **standard MCP server** (`mcp-unifi`) that works with any MCP client: Claude Desktop, Cursor, Claude Code, pi, …
 
-## What you get
+Both use the **official UniFi Network Integration API** (key-based, UniFi OS 10.x) — no scraping, no legacy credentials.
 
-| Entry point | Use with | Transport |
-|---|---|---|
-| `pi-unifi` extension | [pi coding agent](https://github.com/earendil-works/pi) | in-process tools, deferred discovery |
-| `mcp-unifi` binary | any MCP client: pi (`mcp.json`), Claude Desktop, Cursor, … | stdio |
+- **25 tools** — 13 read, 12 write
+- **Resolve by name** — `unifi_device device="office-ap"`, not just UUIDs; MAC and IP work too
+- **Controller filter DSL** — `filter=name.like('office*')` on every list tool
+- **Read-only mode** — hide all write tools with one environment variable
+- **Zero-config site** — single-site controllers are auto-detected
 
-Both entry points share one tool surface (25 tools; 13 read + 12 write) and one client:
+## Requirements
 
-- **Read**: `unifi_status`, `unifi_devices`, `unifi_device`, `unifi_device_stats`, `unifi_clients`, `unifi_client`, `unifi_networks`, `unifi_wifis`, `unifi_radius_profiles`, `unifi_vouchers`, `unifi_firewall_zones`, `unifi_firewall_policies`, `unifi_get` (generic read for any `/v1/...` path)
-- **Write**: `unifi_device_action` (RESTART/LOCATE), `unifi_port_action` (e.g. PoE `POWER_CYCLE`), `unifi_client_action` (BLOCK/UNBLOCK), `unifi_create_voucher`, `unifi_network_create/update/delete`, `unifi_wifi_update`, `unifi_wifi_create_enterprise`, `unifi_wifi_delete`, `unifi_firewall_policy_create/update`
+| Requirement | Notes |
+|---|---|
+| UniFi controller | UniFi OS (UDM/UDR/UNVR/UCG/Cloud Gateway or UniFi OS Server) with **Network application 10.x**; Integration API available since 10.6 |
+| API key | Create in the controller UI: **Settings → Integrations → API Keys** (10.7+) or **Settings → Control Plane → Integrations**. Use a **read-only key** unless you intend to allow changes |
+| Network access | The client machine must reach the controller (LAN/VPN). A locally-created key does **not** work against `api.ui.com` cloud URLs — see [Cloud/remote consoles](#cloudremote-consoles) |
+| Node.js | ≥ 20 (for the MCP server / npx usage) |
+| [pi](https://github.com/earendil-works/pi) | Only for the extension entry point |
 
-Nice touches: devices/clients resolve by **name or MAC**, not just id; the single site is auto-detected; list tools speak the controller's filter DSL (`filter=name.like('office*')`).
+## Quick start
 
-## Configuration
+### MCP clients (Claude Desktop, Cursor, Claude Code, pi, …)
 
-Environment variables (a 10-line parser also reads `.env.local` / `.env` from the working directory — no dotenv dependency):
-
-| Variable | Required | Default | Meaning |
-|---|---|---|---|
-| `UOS_API_KEY` | yes | — | Integration API key — *UniFi Network → Settings → Integrations → API Keys* |
-| `UOS_BASE_URL` | yes | — | UniFi OS host, e.g. `https://172.30.55.28:11443` |
-| `UOS_API_PATH` | no | `/proxy/network/integration` | Path prefix before `/v1`. UniFi OS consoles (UDM/UNVR/UOS Server) keep the default; standalone Network installs set `/integration` |
-| `UOS_SITE_ID` | no | auto | Pin a site; otherwise the single site is auto-detected |
-| `UOS_READ_ONLY` | no | `false` | `true` registers read tools only (both entry points) |
-| `UOS_TLS_STRICT` | no | `false` | `true` enforces TLS validation (self-signed certs are tolerated by default) |
-
-See `.env.example`. A locally-created key does **not** work against `api.ui.com` cloud URLs — for remote-hosted deployments create a UI cloud API key (account.ui.com) and set `UOS_BASE_URL=https://api.ui.com/v1/connector/consoles/<consoleId>`, `UOS_API_PATH=/proxy/network/integration`.
-
-## Use with pi (extension)
-
-```bash
-# from npm
-pi install npm:@bacnh85/pi-unifi
-# local checkout
-pi install /Volumes/Dev/homelab/unifi-mcp
-```
-
-Tools are registered with **`exposure: "deferred"`** — they cost zero prompt tokens and are *not* declared to the model upfront. When a task touches the network, the model finds them via `tool_search` and activates what it needs. Just ask: *"what's on my unifi network?"*
-
-`/unifi` prints instant status (version, site, device/client counts).
-
-If a session runs without `tool_search` (e.g. `--tools` overrides), add `"defaultTools": ["+tool_search"]` to pi settings so deferred tools stay reachable.
-
-## Use with any MCP client
-
-```bash
-# pi (stdio)
-pi mcp add unifi --env UOS_API_KEY=... --env UOS_BASE_URL=https://172.30.55.28:11443 -- node /path/to/this/repo/dist/mcp-server.js
-
-# any directory — npx downloads the package and runs the bundled binary
-pi mcp add unifi --env UOS_API_KEY=... --env UOS_BASE_URL=https://172.30.55.28:11443 -- npx -y @bacnh85/pi-unifi
-```
-
-Claude Desktop / Cursor (`mcp.json`):
+**Claude Desktop / Cursor** — add to the MCP config (`claude_desktop_config.json` / `mcp.json`):
 
 ```json
 {
@@ -69,42 +40,154 @@ Claude Desktop / Cursor (`mcp.json`):
       "command": "npx",
       "args": ["-y", "@bacnh85/pi-unifi"],
       "env": {
-        "UOS_API_KEY": "...",
-        "UOS_BASE_URL": "https://172.30.55.28:11443"
+        "UOS_API_KEY": "your-integration-api-key",
+        "UOS_BASE_URL": "https://192.168.1.1"
       }
     }
   }
 }
 ```
 
-Prefer read-only through MCP? Add `"UOS_READ_ONLY": "true"` to `env`.
+Self-signed certificates are tolerated by default (controllers ship them). To enforce validation set `"UOS_TLS_STRICT": "true"`.
 
-## Filter DSL (list tools)
+**pi (any directory)**:
 
-The controller's filter syntax passes through untouched: `filter=name.eq('web-server')`, `and(enabled.eq(true), name.isNotNull())`, `not(name.like('guest*'))`, `type.in('uap','usw')`. Wildcards use `*`. Timestamps are ISO-8601.
+```bash
+pi mcp add unifi \
+  --env UOS_API_KEY=your-integration-api-key \
+  --env UOS_BASE_URL=https://192.168.1.1 \
+  -- npx -y @bacnh85/pi-unifi
+```
+
+**Claude Code**:
+
+```bash
+claude mcp add unifi \
+  --env UOS_API_KEY=your-integration-api-key \
+  --env UOS_BASE_URL=https://192.168.1.1 \
+  -- npx -y @bacnh85/pi-unifi
+```
+
+### pi extension (in-process, zero prompt tokens)
+
+```bash
+pi install npm:@bacnh85/pi-unifi
+```
+
+Then just ask: *"what's on my unifi network?"* — tools are discovered on demand via `tool_search` (deferred exposure), so they cost no prompt tokens until needed. `/unifi` prints instant status. If a session runs without `tool_search` (e.g. `--tools` overrides), add `"defaultTools": ["+tool_search"]` to pi settings.
+
+### Run the server directly
+
+```bash
+# one-off, no install
+UOS_API_KEY=... UOS_BASE_URL=https://192.168.1.1 npx -y @bacnh85/pi-unifi
+
+# or install it
+npm install -g @bacnh85/pi-unifi
+mcp-unifi   # serves MCP over stdio
+```
+
+## Configuration
+
+All variables are optional except the first two. A small built-in parser also reads `.env.local` / `.env` from the working directory (no dotenv dependency) — see `.env.example`.
+
+| Variable | Required | Default | Meaning |
+|---|---|---|---|
+| `UOS_API_KEY` | yes | — | Integration API key |
+| `UOS_BASE_URL` | yes | — | UniFi OS host, e.g. `https://192.168.1.1` (port included if non-standard) |
+| `UOS_API_PATH` | no | `/proxy/network/integration` | Path prefix before `/v1`. UniFi OS consoles keep the default; standalone Network installs set `/integration` |
+| `UOS_SITE_ID` | no | auto | Pin a site; otherwise the single site is auto-detected (multi-site requires this) |
+| `UOS_READ_ONLY` | no | `false` | `true` registers read tools only — write tools disappear from the tool list entirely |
+| `UOS_TLS_STRICT` | no | `false` | `true` enforces TLS certificate validation |
+
+### Cloud / remote consoles
+
+A locally-created Integration API key does **not** work against `api.ui.com` cloud URLs. For remote-hosted deployments create a UI cloud API key (account.ui.com) and set:
+
+```
+UOS_BASE_URL=https://api.ui.com/v1/connector/consoles/<consoleId>
+UOS_API_PATH=/proxy/network/integration
+```
+
+## Tools
+
+| Tool | Type | What it does |
+|---|---|---|
+| `unifi_status` | read | Application version, sites; validates API key + connectivity |
+| `unifi_devices` | read | List devices (gateways, switches, APs); supports the filter DSL |
+| `unifi_device` | read | One device by id / MAC / name |
+| `unifi_device_stats` | read | Live stats: CPU, memory, load, throughput, per-port/radio |
+| `unifi_clients` | read | Connected clients (wired, wireless, VPN, guest) |
+| `unifi_client` | read | One client by id / MAC / IP / name |
+| `unifi_networks` | read | Networks/VLANs |
+| `unifi_wifis` | read | WiFi broadcasts (SSIDs) + security configuration |
+| `unifi_radius_profiles` | read | RADIUS profiles (read-only; manage profiles in the UniFi UI) |
+| `unifi_vouchers` | read | Hotspot vouchers |
+| `unifi_firewall_zones` | read | Zone-based firewall zones |
+| `unifi_firewall_policies` | read | Zone-based firewall policies |
+| `unifi_get` | read | Generic GET for any `/v1/...` endpoint without a dedicated tool |
+| `unifi_device_action` | write | RESTART (reboot) / LOCATE (blink LED) |
+| `unifi_port_action` | write | Switch-port actions, e.g. PoE `POWER_CYCLE` |
+| `unifi_client_action` | write | BLOCK / UNBLOCK a client |
+| `unifi_create_voucher` | write | Create hotspot vouchers |
+| `unifi_network_create` / `unifi_network_update` / `unifi_network_delete` | write | Manage networks/VLANs |
+| `unifi_wifi_update` / `unifi_wifi_delete` | write | Update or remove SSIDs |
+| `unifi_wifi_create_enterprise` | write | Create a WPA2-Enterprise (802.1X) SSID |
+| `unifi_firewall_policy_create` / `unifi_firewall_policy_update` | write | Manage zone-based firewall policies |
+
+All list tools accept the controller's filter syntax, passed through verbatim: `filter=name.eq('web-server')`, `and(enabled.eq(true), name.isNotNull())`, `not(name.like('guest*'))`, `type.in('uap','usw')`. Wildcards use `*`; timestamps are ISO-8601.
+
+## Example prompts
+
+- *"What's on my UniFi network?"* → version, sites, devices, clients
+- *"Which access points have clients on the guest SSID?"*
+- *"Show CPU and memory for the USW switch"* → `unifi_device_stats`
+- *"Reboot the UAP in the office"* → `unifi_device_action RESTART`
+- *"Cut network access for the device with MAC aa:bb:cc:dd:ee:ff"* → `unifi_client_action BLOCK`
+- *"Create a voucher: 8 hours, 10 uses, named 'guests-weekend'"*
+- *"Add a VLAN 30 'iot' network and put the 'Cameras' SSID on it"*
+
+## Security
+
+- **Use a read-only API key** (created the same way; the UI offers the choice) — the controller rejects writes regardless of tool availability.
+- `UOS_READ_ONLY=true` additionally hides every write tool from the tool list, so the model never sees them.
+- Destructive tools are annotated with MCP `destructiveHint`, which most clients surface as confirmation prompts.
+- API keys stay in your client's config (or `.env.local`) and are only sent to your controller. The server talks to nothing else.
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---|---|
+| `Missing UOS_API_KEY` on startup | Env var not set — check the `env` block in your client config; remember some clients need a restart after editing it |
+| `UniFi API 401` | Key revoked or wrong — recreate in Settings → Integrations |
+| `UniFi API 404` on every call | Wrong `UOS_API_PATH`: standalone Network installs need `/integration`, UniFi OS keeps the default |
+| Connection refused / timeout | The client machine can't reach the controller — VPN or LAN required; `npx` runs on your machine, not in the cloud |
+| `Multiple sites found` | Set `UOS_SITE_ID` (get ids from `unifi_status`) |
+| TLS errors with `UOS_TLS_STRICT=true` | Controller uses a self-signed cert — leave strict mode off, or install a trusted cert |
+| Tools visible but calls fail with 400 `Zone Based Firewall is not configured` | ZBF isn't enabled on the controller; firewall tools need it |
 
 ## Development
 
 ```bash
-npm install        # deps: @modelcontextprotocol/sdk (v1), zod, undici
+git clone ssh://git@github.com/bacnh85/unifi-agents.git
+cd unifi-agents
+npm install
 npm run build      # tsc → dist/ (+ pi extension copied next to it)
-npm run smoke      # unit + live-controller assertions (total printed by the script)
+npm run smoke      # unit + live-controller assertions (live part needs UOS_* env or .env.local)
 npm start          # run the MCP server over stdio
 ```
 
-CI (`.github/workflows/ci.yml`): every push/PR runs build + smoke (unit checks; live-controller checks self-skip on GitHub-hosted runners — your controller is on a private LAN, unreachable from Actions). Pushes to `main` additionally publish to npm as `@bacnh85/pi-unifi` using the `NPM_TOKEN` secret. To run live-controller checks in CI, use a self-hosted runner on the same network and set the `UOS_API_KEY`/`UOS_BASE_URL` secrets.
+Verify in pi without installing: `pi -e ./src/extension.ts`
 
-Verify in pi without installing: `pi -e /Volumes/Dev/homelab/unifi-mcp/src/extension.ts`
+### CI & releases
+
+Every push/PR runs build + smoke (unit checks; live-controller checks self-skip on GitHub-hosted runners — a home controller is unreachable from Actions). Pushes to `main` publish to npm as [`@bacnh85/pi-unifi`](https://www.npmjs.com/package/@bacnh85/pi-unifi) automatically when the version isn't published yet, using the `NPM_TOKEN` secret. To release: bump `version` in `package.json`, push to `main`.
 
 ## Notes
 
-- UniFi Network API endpoints are called verbatim (`/v1/...`) behind the configured prefix — verified against UniFi Network 10.6.106 on UniFi OS Server.
-- Write tools are annotated `destructiveHint` where they delete or disrupt; a controller-side read-only API key is the strongest guardrail (`UOS_READ_ONLY=true` additionally hides them from the tool list).
+- API endpoints are called verbatim (`/v1/...`) behind the configured prefix — verified against UniFi Network 10.6.106 on UniFi OS Server.
+- RADIUS profiles and wired 802.1X port profiles are **read-only via the Integration API** on 10.6.x (create them in the UniFi UI); `unifi_wifi_create_enterprise` covers WPA2-Enterprise SSIDs.
 
-## 802.1X (WPA2-Enterprise WiFi) on Network 10.6.106
+## License
 
-Verified live against UniFi OS Server + Network 10.6.106:
-
-- `unifi_radius_profiles` lists RADIUS profiles (`id`, `name`, `metadata`). **The API is read-only here**: `POST /v1/sites/{siteId}/radius/profiles` returns `405` — create/delete RADIUS profiles (RADIUS servers, auth servers, VLANs) in the UniFi UI.
-- `unifi_wifi_create_enterprise` creates a WPA2-Enterprise SSID via `POST /v1/sites/{siteId}/wifi/broadcasts`. Shape quirks baked into the tool: `securityConfiguration` requires `fastRoamingEnabled` explicitly; `nasId` may be `{"type":"DERIVED","source":"DEVICE_NAME"}` — **`DEVICE_NAME` is the only valid `source`** (`SSID_NAME`/`MAC_ADDRESS`/`SSID` all fail with "Type mismatch"); the alternative is `{"type":"USER_DEFINED","value":"<ssid>"}`.
-- Wired 802.1X is **not reachable via the Integration API on 10.6.106**: every switch port-profile endpoint tried returns 404 (`/v1/sites/{id}/port-profiles`, `/v1/sites/{id}/switch/profiles`, `/v1/sites/{id}/switch-port-profiles`, `/v1/port-profiles`, `/v1/sites/{id}/port/profiles`, plus a 20-spelling sweep incl. `portconf`, `port-profile-groups`, `port-configs`, `network-profiles`, `/devices/port-profiles` — all 404/400, verified 2025-05 against a known-good control endpoint; and `/v1/sites/{id}/devices/{id}/interfaces/ports/{n}` GET/PATCH). Device `interfaces.ports` is read-only state. **Create wired port profiles in the UniFi UI.**
+[MIT](LICENSE)
