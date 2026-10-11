@@ -17,7 +17,19 @@ async function main() {
   };
   const readOnly = loadConfig().readOnly;
 
-  const server = new McpServer({ name: "unifi", version: "0.1.0" });
+  // Top-level MCP instructions: context every MCP client shows/uses alongside the tool list.
+  const INSTRUCTIONS =
+    "UniFi Network controller tools via the official Integration API (key-based, UniFi OS). " +
+    "Orientation: call unifi_status first. Devices/clients resolve by id, MAC, IP (clients), or case-insensitive name — " +
+    "exact-name misses retry with the MAC shown in the Candidates list, since UniFi suffixes duplicate client names with the MAC tail. " +
+    "List tools accept the controller filter DSL, e.g. filter=name.eq('office-ap') or type.eq('uap'); wildcards use *. " +
+    "Generic reads of any /v1/... endpoint go through unifi_get. " +
+    "Write tools are rejected by the controller when the API key is read-only; UOS_READ_ONLY=true also hides them from this list.";
+
+  const server = new McpServer(
+    { name: "unifi", version: "0.1.0" },
+    { instructions: INSTRUCTIONS },
+  );
   for (const tool of buildTools(getClient, readOnly)) {
     server.registerTool(
       tool.name,

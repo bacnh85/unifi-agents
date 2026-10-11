@@ -157,12 +157,24 @@ export class UniFiClient {
   ): Record<string, unknown> {
     const wanted = key.toLowerCase();
     const mac = normalizeMac(key);
+    const field = (it: Record<string, unknown>, ...names: string[]): unknown => {
+      for (const n of names) {
+        if (it[n] != null) return it[n];
+      }
+      return undefined;
+    };
     const exact = items.find((it) => String(it.id ?? "").toLowerCase() === wanted);
     if (exact) return exact;
     if (mac) {
-      const byMac = items.find((it) => normalizeMac(String(it.mac ?? "")) === mac);
+      const byMac = items.find((it) => normalizeMac(String(field(it, "macAddress", "mac") ?? "")) === mac);
       if (byMac) return byMac;
     }
+    const byIp = items.find(
+      (it) =>
+        String(field(it, "ipAddress", "ip") ?? "").toLowerCase() === wanted ||
+        String(it.name ?? "").toLowerCase().endsWith(` ${wanted}`),
+    );
+    if (byIp) return byIp;
     const byName = items.find((it) => String(it.name ?? "").toLowerCase() === wanted);
     if (byName) return byName;
     if (items.length === 0) {
@@ -170,7 +182,7 @@ export class UniFiClient {
     }
     const candidates = items
       .slice(0, 8)
-      .map((it) => `${it.name ?? it.id}${it.mac ? ` [${it.mac}]` : ""}`)
+      .map((it) => `${it.name ?? it.id}${field(it, "macAddress", "mac") ? ` [${field(it, "macAddress", "mac")}]` : ""}`)
       .join(", ");
     throw new Error(`No ${kind} matches "${key}". Candidates: ${candidates}${items.length > 8 ? " …" : ""}`);
   }

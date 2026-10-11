@@ -38,6 +38,28 @@ const { loadConfig } = await import(`${repoRoot}dist/config.js`);
   eq(cfg.apiPrefix.endsWith("/v1"), false, "config apiPrefix never ends in /v1");
 }
 
+// ---- Pure: name/MAC/IP resolution (pick) -----------------------------------
+{
+  const client = new UniFiClient({ baseUrl: "https://x", apiPrefix: "/proxy/network/integration", apiKey: "k", readOnly: false, tlsStrict: false });
+  // Access private pick() via a tiny cast — it's the one pure matcher worth locking down.
+  const pick = (items, key) =>
+    (client).pick(items, key, "thing");
+  const devices = [
+    { id: "71f1", macAddress: "74:FA:29:3B:53:66", name: "USW-Lite-8-PoE", ipAddress: "172.30.60.172" },
+    { id: "3c07", macAddress: "3c:07:95:2:09:6a", name: "U7 Lite" },
+  ];
+  const clients = [
+    { id: "7f7b", macAddress: "82:78:9B:AB:B1:0F", name: "HaiBac-s-S24-Ultra ab:b1", ipAddress: "172.30.60.164" },
+  ];
+  eq(pick(devices, "74:fa:29:3b:53:66").id, "71f1", "pick device by lowercase MAC matches uppercase field");
+  eq(pick(clients, "82:78:9B:AB:B1:0F").id, "7f7b", "pick client by MAC (macAddress field, case-insensitive)");
+  eq(pick(devices, "usw-lite-8-poe").id, "71f1", "pick device by case-insensitive name");
+  eq(pick(clients, "haibac-s-s24-ultra ab:b1").id, "7f7b", "pick client by full suffixed name");
+  eq(pick(clients, "82:78:9b:ab:b1:0f").id, "7f7b", "client name suffix falls back to the MAC it contains");
+  eq(pick(clients, "172.30.60.164").id, "7f7b", "pick client by IP");
+  eq(pick(devices, "3c07").id, "3c07", "pick by exact id");
+}
+
 // ---- Pure: tools surface ---------------------------------------------------
 {
   const readOnly = buildTools(async () => ({}), true);

@@ -1,8 +1,10 @@
 # unifi-agents
 
+[![CI](https://github.com/bacnh85/unifi-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/bacnh85/unifi-agents/actions/workflows/ci.yml)
+
 [UniFi Network](https://uni.fi) for AI agents: a **pi coding agent extension** (`pi-unifi`) and a **standard MCP server** (`mcp-unifi`) in one package, built on the official UniFi Network Integration API (key-based, UniFi OS 10.x).
 
-Repo: `github.com/bacnh85/unifi-agents` · npm package: `pi-unifi`
+Repo: `github.com/bacnh85/unifi-agents` · npm package: [`@bacnh85/pi-unifi`](https://www.npmjs.com/package/@bacnh85/pi-unifi)
 
 ## What you get
 
@@ -36,10 +38,10 @@ See `.env.example`. A locally-created key does **not** work against `api.ui.com`
 ## Use with pi (extension)
 
 ```bash
+# from npm
+pi install npm:@bacnh85/pi-unifi
 # local checkout
 pi install /Volumes/Dev/homelab/unifi-mcp
-# or, once pushed to GitHub
-pi install git:github.com/bacnh85/unifi-agents
 ```
 
 Tools are registered with **`exposure: "deferred"`** — they cost zero prompt tokens and are *not* declared to the model upfront. When a task touches the network, the model finds them via `tool_search` and activates what it needs. Just ask: *"what's on my unifi network?"*
@@ -54,8 +56,8 @@ If a session runs without `tool_search` (e.g. `--tools` overrides), add `"defaul
 # pi (stdio)
 pi mcp add unifi --env UOS_API_KEY=... --env UOS_BASE_URL=https://172.30.55.28:11443 -- node /path/to/this/repo/dist/mcp-server.js
 
-# or from GitHub once pushed
-pi mcp add unifi --env UOS_API_KEY=... --env UOS_BASE_URL=https://172.30.55.28:11443 -- npx -y github:bacnh85/unifi-agents
+# any directory — npx downloads the package and runs the bundled binary
+pi mcp add unifi --env UOS_API_KEY=... --env UOS_BASE_URL=https://172.30.55.28:11443 -- npx -y @bacnh85/pi-unifi
 ```
 
 Claude Desktop / Cursor (`mcp.json`):
@@ -64,8 +66,8 @@ Claude Desktop / Cursor (`mcp.json`):
 {
   "mcpServers": {
     "unifi": {
-      "command": "node",
-      "args": ["/path/to/this/repo/dist/mcp-server.js"],
+      "command": "npx",
+      "args": ["-y", "@bacnh85/pi-unifi"],
       "env": {
         "UOS_API_KEY": "...",
         "UOS_BASE_URL": "https://172.30.55.28:11443"
@@ -89,6 +91,8 @@ npm run build      # tsc → dist/ (+ pi extension copied next to it)
 npm run smoke      # unit + live-controller assertions (total printed by the script)
 npm start          # run the MCP server over stdio
 ```
+
+CI (`.github/workflows/ci.yml`): every push/PR runs build + smoke (unit checks; live-controller checks self-skip on GitHub-hosted runners — your controller is on a private LAN, unreachable from Actions). Pushes to `main` additionally publish to npm as `@bacnh85/pi-unifi` using the `NPM_TOKEN` secret. To run live-controller checks in CI, use a self-hosted runner on the same network and set the `UOS_API_KEY`/`UOS_BASE_URL` secrets.
 
 Verify in pi without installing: `pi -e /Volumes/Dev/homelab/unifi-mcp/src/extension.ts`
 

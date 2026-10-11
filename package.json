@@ -1,5 +1,5 @@
 {
-  "name": "pi-unifi",
+  "name": "@bacnh85/pi-unifi",
   "version": "0.1.0",
   "description": "UniFi Network (UniFi OS) tools for the pi coding agent and a standard MCP server (mcp-unifi) — official UniFi Network Integration API.",
   "type": "module",
@@ -8,6 +8,11 @@
     "type": "git",
     "url": "git+https://github.com/bacnh85/unifi-agents.git"
   },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "bin": {
     "mcp-unifi": "dist/mcp-server.js"
   },
